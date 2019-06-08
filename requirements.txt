@@ -1,0 +1,4 @@
+requests
+aiohttp
+progressbar2
+async_pool
