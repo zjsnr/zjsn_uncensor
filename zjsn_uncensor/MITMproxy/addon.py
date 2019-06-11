@@ -33,6 +33,7 @@ class ZjsnHelper:
 
     @catch
     def request(self, flow: http.HTTPFlow):
+        print('requesting', flow.request.url)
         if 'jr.moefantasy.com' not in flow.request.host:
             flow.response = http.HTTPResponse.make(404, b'')
 
