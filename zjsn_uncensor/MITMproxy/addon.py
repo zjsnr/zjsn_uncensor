@@ -34,7 +34,8 @@ class ZjsnHelper:
     @catch
     def request(self, flow: http.HTTPFlow):
         print('requesting', flow.request.url)
-        if 'jr.moefantasy.com' not in flow.request.host:
+        if all(domain not in flow.request.host
+               for domain in ('moefantasy.com', 'gwy15.com')):
             flow.response = http.HTTPResponse.make(404, b'')
 
     @catch
