@@ -52,34 +52,44 @@ class ResourceDownloader():
 
         versionData = requests.get(version_url).json()
         resourceVersion = versionData['DataVersion']  # resource version
-        uncensoredManifestUrl = versionData['ResUrlWu']
-        # [:versionData['ResUrlWu'].find('?')] # remove query string
-        manifestUrl = versionData['ResUrl']
+
         return {
-            'censored': manifestUrl,
-            'uncensored': uncensoredManifestUrl
+            'censored': versionData['ResUrl'],
+            'uncensored': versionData['ResUrlWu']
         }
 
     @staticmethod
     def getManifestData(manifestUrl):
         resp = requests.get(manifestUrl)
         if resp.status_code != 200:
-            print(manifestUrl)
-            raise RuntimeError(resp.text)
-        manifestContentCompressed = resp.content
-        manifestContent = compressLib.decompress(manifestContentCompressed)
+            print('Manifest download failed. Retring with no query string.')
+            # remove query string
+            manifestUrl = manifestUrl[:manifestUrl.find('?')]
+            resp = requests.get(manifestUrl)
+            if resp.status_code != 200:
+                raise RuntimeError(resp.text)
+
+        manifestContent = compressLib.decompress(resp.content)
         manifestData = json.loads(manifestContent.decode())
         return manifestData
 
     def run(self):
         manifestUrls = self.getManifestUrls()
+        print(manifestUrls)
 
         censoredManifestData = self.getManifestData(manifestUrls['censored'])
         self.censoredVersion = censoredManifestData['version']
+        with open('censoredManifest.json', 'w') as f:
+            json.dump(censoredManifestData, f)
 
         uncensoredManifestData = self.getManifestData(
             manifestUrls['uncensored'])
         self.uncensoredVersion = uncensoredManifestData['version']
+        with open('uncensoredManifest.json', 'w') as f:
+            json.dump(uncensoredManifestData, f)
+
+        print('Censored version:', self.censoredVersion)
+        print('Uncensored version:', self.uncensoredVersion)
 
         # compare
         differ = ListDiffer(
@@ -90,12 +100,16 @@ class ResourceDownloader():
         print('deleted', len(differ.deleted))
 
         # download new and diff
-        targets = differ.diff + differ.new
         urlPrefix = uncensoredManifestData['packageUrl']
+        # urlPrefix = censoredManifestData['packageUrl']
         targets = [
             (urlPrefix, name, *uncensored)
-            for name, censored, uncensored in targets
+            # (urlPrefix, name, *censored)
+            for name, censored, uncensored
+            in differ.diff + differ.new
         ]
+        print('Total size: {:.2f} MiB'.format(
+            sum(item[2] for item in targets) / 1024 / 1024))
 
         bar = progressbar.ProgressBar(max_value=len(targets))
 
@@ -109,6 +123,7 @@ class ResourceDownloader():
         bar.finish()
 
     async def downloadUrl(self, prefix, name, size, md5, downloadPath='data'):
+        # ensure parent path exists
         path = Path(downloadPath)
         path.mkdir(exist_ok=True)
         *pathNames, filename = name.split('/')
@@ -117,6 +132,7 @@ class ResourceDownloader():
             path.mkdir(exist_ok=True)
         filePath = path / filename
 
+        # skip existing file
         if filePath.exists() and filePath.stat().st_size == size:
             with filePath.open('rb') as f:
                 if hashlib.md5(f.read()).hexdigest() == md5:
@@ -125,7 +141,13 @@ class ResourceDownloader():
         url = prefix + name + '?md5=' + md5
         async with aiohttp.ClientSession() as sess:
             async with sess.get(url) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(f'{url} status code: {resp.status}')
                 data = await resp.read()
+                if len(data) != size:
+                    raise RuntimeError(
+                        f'{url} size doesn\'t match. {size} bytes expected, got {len(data)} bytes.')
+
         with filePath.open('wb') as f:
             f.write(data)
 
