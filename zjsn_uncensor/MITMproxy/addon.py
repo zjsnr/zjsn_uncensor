@@ -34,23 +34,32 @@ class ZjsnHelper:
     @catch
     def request(self, flow: http.HTTPFlow):
         print('requesting', flow.request.url)
-        if all(domain not in flow.request.host
-               for domain in ('moefantasy.com', 'gwy15.com')):
-            flow.response = http.HTTPResponse.make(404, b'')
+        # if all(domain not in flow.request.host
+        #        for domain in ('moefantasy.com', 'gwy15.com')):
+        #     flow.response = http.HTTPResponse.make(404, b'')
 
     @catch
     def response(self, flow: http.HTTPFlow):
         print(f'response host: {flow.request.host}')
-        if re.match(self.VERSION_HOST, flow.request.host):
-            self.onVersionCheck(flow)
+        if 'warshipgirlsr.manifest.gz' in flow.request.url:
+            print('replacing manifest.gz')
+            with open('data/warshipgirlsr.manifest.gz', 'rb') as f:
+                flow.response.set_content(f.read())
+            return
 
     def onVersionCheck(self, flow: http.HTTPFlow):
         '替换 version check'
         print('replacing version check...')
-        data = json.loads(flow.response.get_text())
+        try:
+            data = json.loads(flow.response.get_text())
+            print(data)
+        except Exception as ex:
+            print(ex)
+            raise
 
         data['ResUrl'] = manifestUrl
         data['ResUrlWu'] = manifestUrl
+        print('data replaced.')
 
         flow.response.set_text(json.dumps(data))
 
