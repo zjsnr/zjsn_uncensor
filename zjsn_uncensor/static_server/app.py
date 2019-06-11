@@ -2,7 +2,7 @@ import os
 import flask
 from flask import request
 import requests
-import config
+from zjsn_uncensor import config
 
 app = flask.Flask(__name__)
 
