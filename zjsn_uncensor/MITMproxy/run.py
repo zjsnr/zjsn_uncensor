@@ -10,8 +10,8 @@ from mitmproxy.proxy import ProxyConfig, ProxyServer
 from mitmproxy.addons import core
 from mitmproxy.options import Options
 
-from addon import ZjsnHelper
-
+from zjsn_uncensor.MITMproxy.addon import ZjsnHelper
+from zjsn_uncensor import config
 
 class TestInterceptor(Master):
     def __init__(self, options, server):
@@ -45,7 +45,7 @@ def start_proxy(port):
 
 
 def main():
-    start_proxy(14514)
+    start_proxy(config.MITM_SERVER_PORT)
 
 
 if __name__ == '__main__':

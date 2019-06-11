@@ -8,7 +8,7 @@ import zlib
 import json
 
 from mitmproxy import http
-import config
+from zjsn_uncensor import config
 
 manifestUrl = config.STATIC_URL_PREFIX + 'warshipgirlsr.manifest.gz'
 
