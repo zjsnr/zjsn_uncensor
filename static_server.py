@@ -7,7 +7,7 @@ import config
 app = flask.Flask(__name__)
 
 
-@app.route('/<path:path>')
+@app.route('/zjsn/<path:path>')
 def proxy(path):
     filename = 'data/' + path
     if os.path.exists(filename):

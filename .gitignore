@@ -2,3 +2,5 @@ data
 *.json
 *.gz
 
+__pycache__
+
