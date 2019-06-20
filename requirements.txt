@@ -6,3 +6,4 @@ async_pool
 flask
 mitmproxy
 
+click

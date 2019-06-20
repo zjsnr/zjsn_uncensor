@@ -3,6 +3,7 @@ import json
 import hashlib
 import asyncio
 from pathlib import Path
+import dataclasses
 
 import requests
 import aiohttp
@@ -14,34 +15,28 @@ __CHANNEL__ = 100014
 __MARKET__ = 2
 
 
-class ListDiffer():
-    def __init__(self, origin, new):
-        originDict = self.list2Dict(origin)
-        newDict = self.list2Dict(new)
+@dataclasses.dataclass
+class File:
+    name: str
+    size: int
+    md5: str
 
-        self.same = []
-        self.diff = []
-        self.deleted = []
-        self.new = []
-        for k in originDict:
-            v1 = originDict[k]
-            if k in newDict:
-                if originDict[k] == newDict[k]:
-                    self.same.append((k, v1, newDict[k]))
-                else:
-                    self.diff.append((k, v1, newDict[k]))
-            else:
-                self.deleted.append((k, v1, None))
-        for k in newDict:
-            if k not in originDict:
-                self.new.append((k, None, newDict[k]))
+    def __hash__(self):
+        return int(self.md5, base=16)
 
-    @staticmethod
-    def list2Dict(arr):
+    def toDict(self):
         return {
-            item['name']: (item['size'], item['md5'])
-            for item in arr
+            'name': self.name,
+            'size': self.size,
+            'md5': self.md5
         }
+
+
+class ListDiffer():
+    def __init__(self, censored, uncensored):
+        self.same = censored & uncensored
+        self.censored_only = censored - uncensored
+        self.uncensored_only = uncensored - censored
 
 
 class ResourceDownloader():
@@ -50,6 +45,7 @@ class ResourceDownloader():
         version_url = f'http://version.jr.moefantasy.com/index/checkVer/{__VERSION__}/{__CHANNEL__}/{__MARKET__}'
         version_url += f'&version={__VERSION__}&channel={__CHANNEL__}&market={__MARKET__}'
 
+        print(f'getting {version_url}')
         versionData = requests.get(version_url).json()
         resourceVersion = versionData['DataVersion']  # resource version
 
@@ -77,14 +73,21 @@ class ResourceDownloader():
         manifestUrls = self.getManifestUrls()
         print(manifestUrls)
 
+        # get file lists
         censoredManifestData = self.getManifestData(manifestUrls['censored'])
         self.censoredVersion = censoredManifestData['version']
+        self.censoredPrefix = censoredManifestData['packageUrl']
+        self.censoredFiles = set(File(**item)
+                                 for item in censoredManifestData['hot'])
         with open('censoredManifest.json', 'w') as f:
             json.dump(censoredManifestData, f)
 
         uncensoredManifestData = self.getManifestData(
             manifestUrls['uncensored'])
         self.uncensoredVersion = uncensoredManifestData['version']
+        self.uncensoredPrefix = uncensoredManifestData['packageUrl']
+        self.uncensoredFiles = set(File(**item)
+                                   for item in uncensoredManifestData['hot'])
         with open('uncensoredManifest.json', 'w') as f:
             json.dump(uncensoredManifestData, f)
 
@@ -92,37 +95,43 @@ class ResourceDownloader():
         print('Uncensored version:', self.uncensoredVersion)
 
         # compare
-        differ = ListDiffer(
-            censoredManifestData['hot'], uncensoredManifestData['hot'])
+        differ = ListDiffer(self.censoredFiles, self.uncensoredFiles)
         print('same', len(differ.same))
-        print('diff', len(differ.diff))
-        print('new', len(differ.new))
-        print('deleted', len(differ.deleted))
+        print('censored only', len(differ.censored_only))
+        print('uncensored only', len(differ.uncensored_only))
 
-        # download new and diff
-        urlPrefix = uncensoredManifestData['packageUrl']
-        # urlPrefix = censoredManifestData['packageUrl']
-        targets = [
-            (urlPrefix, name, *uncensored)
-            # (urlPrefix, name, *censored)
-            for name, censored, uncensored
-            in differ.diff + differ.new
-        ]
+        # download common
+        self.downloadFiles(self.uncensoredPrefix,
+                           differ.uncensored_only, 'uncensored', version=self.uncensoredVersion)
+        self.downloadFiles(self.censoredPrefix,
+                           differ.censored_only, 'censored', version=self.censoredVersion)
+        self.downloadFiles(self.censoredPrefix, differ.same,
+                           'common', version=self.censoredVersion)
+
+    def downloadFiles(self, prefix, files, name, version, downloadPath='data'):
         print('Total size: {:.2f} MiB'.format(
-            sum(item[2] for item in targets) / 1024 / 1024))
+            sum(f.size for f in files) / 1024 / 1024))
 
-        bar = progressbar.ProgressBar(max_value=len(targets))
+        path = downloadPath / name
 
-        async def f(args):
-            await self.downloadUrl(*args)
+        bar = progressbar.ProgressBar(max_value=len(files))
+
+        async def f(file: File):
+            await self.downloadUrl(prefix, file.name, file.size, file.md5, path)
             bar.update(bar.value + 1)
 
         bar.start()
         with async_pool.Pool(10) as pool:
-            pool.map(f, targets)
+            pool.map(f, files)
         bar.finish()
 
-    async def downloadUrl(self, prefix, name, size, md5, downloadPath='data'):
+        with (Path(path) / f'{name}.json').open('w') as f:
+            json.dump({
+                'version': version,
+                'files': [f.toDict() for f in files]
+            }, f)
+
+    async def downloadUrl(self, prefix, name, size, md5, downloadPath):
         # ensure parent path exists
         path = Path(downloadPath)
         path.mkdir(exist_ok=True)
