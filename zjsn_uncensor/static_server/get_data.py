@@ -73,6 +73,11 @@ class ResourceDownloader():
         return manifestData
 
     def run(self):
+        self.downloadPath = 'data'
+        self.download()
+        self.upload()
+
+    def download(self):
         manifestUrls = self.getManifestUrls()
         print(manifestUrls)
 
@@ -82,6 +87,7 @@ class ResourceDownloader():
         censoredPrefix = censoredManifestData['packageUrl']
         censoredFiles = set(File(**item)
                             for item in censoredManifestData['hot'])
+        del censoredManifestData # save RAM
 
         uncensoredManifestData = self.getManifestData(
             manifestUrls['uncensored'])
@@ -89,6 +95,7 @@ class ResourceDownloader():
         uncensoredPrefix = uncensoredManifestData['packageUrl']
         uncensoredFiles = set(File(**item)
                               for item in uncensoredManifestData['hot'])
+        del uncensoredManifestData # save RAM
 
         print('Censored version:', censoredVersion)
         print('Uncensored version:', uncensoredVersion)
@@ -100,14 +107,13 @@ class ResourceDownloader():
         print('uncensored only', len(differ.uncensored_only))
 
         # download files
-        path = Path('data')
+        path = Path(self.downloadPath)
         self.downloadFiles(uncensoredPrefix, differ.uncensored_only,
                            'uncensored', uncensoredVersion, path)
         self.downloadFiles(censoredPrefix, differ.censored_only,
                            'censored', censoredVersion, path)
         self.downloadFiles(censoredPrefix, differ.same,
                            'common', censoredVersion, path)
-        self.upload(path)
 
     def downloadFiles(self, prefix, files, name, version, downloadRootPath: Path):
         print('{}: total size: {:.2f} MiB'.format(
@@ -163,10 +169,10 @@ class ResourceDownloader():
         with filePath.open('wb') as f:
             f.write(data)
 
-    def upload(self, path):
+    def upload(self):
         for item in config.UPLOAD:
             args = [
-                item['bin'], item['cmd'], path, item['dest']
+                item['bin'], item['cmd'], self.downloadPath, item['dest']
             ]
             with subprocess.Popen(args, stdout=subprocess.PIPE) as proc:
                 print(proc.stdout.read())
