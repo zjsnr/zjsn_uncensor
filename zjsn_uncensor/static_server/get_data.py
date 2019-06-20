@@ -4,11 +4,14 @@ import hashlib
 import asyncio
 from pathlib import Path
 import dataclasses
+import subprocess
 
 import requests
 import aiohttp
 import async_pool
 import progressbar
+
+from zjsn_uncensor import config
 
 __VERSION__ = '4.4.0'
 __CHANNEL__ = 100014
@@ -45,9 +48,9 @@ class ResourceDownloader():
         version_url = f'http://version.jr.moefantasy.com/index/checkVer/{__VERSION__}/{__CHANNEL__}/{__MARKET__}'
         version_url += f'&version={__VERSION__}&channel={__CHANNEL__}&market={__MARKET__}'
 
-        print(f'getting {version_url}')
         versionData = requests.get(version_url).json()
-        resourceVersion = versionData['DataVersion']  # resource version
+        if versionData.get('eid', None) == -9999:
+            raise RuntimeError('WDNMD 真就维护了呗？')
 
         return {
             'censored': versionData['ResUrl'],
@@ -75,49 +78,48 @@ class ResourceDownloader():
 
         # get file lists
         censoredManifestData = self.getManifestData(manifestUrls['censored'])
-        self.censoredVersion = censoredManifestData['version']
-        self.censoredPrefix = censoredManifestData['packageUrl']
-        self.censoredFiles = set(File(**item)
-                                 for item in censoredManifestData['hot'])
-        with open('censoredManifest.json', 'w') as f:
-            json.dump(censoredManifestData, f)
+        censoredVersion = censoredManifestData['version']
+        censoredPrefix = censoredManifestData['packageUrl']
+        censoredFiles = set(File(**item)
+                            for item in censoredManifestData['hot'])
 
         uncensoredManifestData = self.getManifestData(
             manifestUrls['uncensored'])
-        self.uncensoredVersion = uncensoredManifestData['version']
-        self.uncensoredPrefix = uncensoredManifestData['packageUrl']
-        self.uncensoredFiles = set(File(**item)
-                                   for item in uncensoredManifestData['hot'])
-        with open('uncensoredManifest.json', 'w') as f:
-            json.dump(uncensoredManifestData, f)
+        uncensoredVersion = uncensoredManifestData['version']
+        uncensoredPrefix = uncensoredManifestData['packageUrl']
+        uncensoredFiles = set(File(**item)
+                              for item in uncensoredManifestData['hot'])
 
-        print('Censored version:', self.censoredVersion)
-        print('Uncensored version:', self.uncensoredVersion)
+        print('Censored version:', censoredVersion)
+        print('Uncensored version:', uncensoredVersion)
 
         # compare
-        differ = ListDiffer(self.censoredFiles, self.uncensoredFiles)
+        differ = ListDiffer(censoredFiles, uncensoredFiles)
         print('same', len(differ.same))
         print('censored only', len(differ.censored_only))
         print('uncensored only', len(differ.uncensored_only))
 
-        # download common
-        self.downloadFiles(self.uncensoredPrefix,
-                           differ.uncensored_only, 'uncensored', version=self.uncensoredVersion)
-        self.downloadFiles(self.censoredPrefix,
-                           differ.censored_only, 'censored', version=self.censoredVersion)
-        self.downloadFiles(self.censoredPrefix, differ.same,
-                           'common', version=self.censoredVersion)
+        # download files
+        path = 'data'
+        self.downloadFiles(uncensoredPrefix, differ.uncensored_only,
+                           'uncensored', uncensoredVersion, path)
+        self.downloadFiles(censoredPrefix, differ.censored_only,
+                           'censored', censoredVersion, path)
+        self.downloadFiles(censoredPrefix, differ.same,
+                           'common', censoredVersion, path)
+        self.upload(path)
 
     def downloadFiles(self, prefix, files, name, version, downloadPath='data'):
-        print('Total size: {:.2f} MiB'.format(
-            sum(f.size for f in files) / 1024 / 1024))
+        print('{}: total size: {:.2f} MiB'.format(
+            name, sum(f.size for f in files) / 1024 / 1024))
 
+        Path(downloadPath).mkdir(exist_ok=True)
         path = downloadPath / name
 
         bar = progressbar.ProgressBar(max_value=len(files))
 
         async def f(file: File):
-            await self.downloadUrl(prefix, file.name, file.size, file.md5, path)
+            await self.downloadUrl(prefix, file, path)
             bar.update(bar.value + 1)
 
         bar.start()
@@ -131,34 +133,43 @@ class ResourceDownloader():
                 'files': [f.toDict() for f in files]
             }, f)
 
-    async def downloadUrl(self, prefix, name, size, md5, downloadPath):
+    async def downloadUrl(self, prefix, file, downloadPath):
         # ensure parent path exists
         path = Path(downloadPath)
         path.mkdir(exist_ok=True)
-        *pathNames, filename = name.split('/')
+        *pathNames, filename = file.name.split('/')
         for d in pathNames:
             path = path / d
             path.mkdir(exist_ok=True)
         filePath = path / filename
 
         # skip existing file
-        if filePath.exists() and filePath.stat().st_size == size:
+        if filePath.exists() and filePath.stat().st_size == file.size:
             with filePath.open('rb') as f:
-                if hashlib.md5(f.read()).hexdigest() == md5:
+                if hashlib.md5(f.read()).hexdigest() == file.md5:
                     return
 
-        url = prefix + name + '?md5=' + md5
+        # build url
+        url = prefix + file.name + '?md5=' + file.md5
         async with aiohttp.ClientSession() as sess:
             async with sess.get(url) as resp:
                 if resp.status != 200:
                     raise RuntimeError(f'{url} status code: {resp.status}')
                 data = await resp.read()
-                if len(data) != size:
+                if len(data) != file.size:
                     raise RuntimeError(
-                        f'{url} size doesn\'t match. {size} bytes expected, got {len(data)} bytes.')
+                        f'{url} size doesn\'t match. {file.size} bytes expected, got {len(data)} bytes.')
 
         with filePath.open('wb') as f:
             f.write(data)
+
+    def upload(self, path):
+        for item in config.UPLOAD:
+            args = [
+                item['bin'], item['cmd'], path, item['dest']
+            ]
+            with subprocess.Popen(args, stdout=subprocess.PIPE) as proc:
+                print(proc.stdout.read())
 
 
 if __name__ == "__main__":
