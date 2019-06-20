@@ -43,6 +43,8 @@ class ListDiffer():
 
 
 class ResourceDownloader():
+    downloadPath = 'data'
+
     @staticmethod
     def getManifestUrls():
         version_url = f'http://version.jr.moefantasy.com/index/checkVer/{__VERSION__}/{__CHANNEL__}/{__MARKET__}'
@@ -73,7 +75,6 @@ class ResourceDownloader():
         return manifestData
 
     def run(self):
-        self.downloadPath = 'data'
         self.download()
         self.upload()
 
@@ -87,7 +88,7 @@ class ResourceDownloader():
         censoredPrefix = censoredManifestData['packageUrl']
         censoredFiles = set(File(**item)
                             for item in censoredManifestData['hot'])
-        del censoredManifestData # save RAM
+        del censoredManifestData  # save RAM
 
         uncensoredManifestData = self.getManifestData(
             manifestUrls['uncensored'])
@@ -95,7 +96,7 @@ class ResourceDownloader():
         uncensoredPrefix = uncensoredManifestData['packageUrl']
         uncensoredFiles = set(File(**item)
                               for item in uncensoredManifestData['hot'])
-        del uncensoredManifestData # save RAM
+        del uncensoredManifestData  # save RAM
 
         print('Censored version:', censoredVersion)
         print('Uncensored version:', uncensoredVersion)
