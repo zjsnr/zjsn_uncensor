@@ -1,6 +1,6 @@
 import json
 import gzip
-import config
+from zjsn_uncensor import config
 
 with open('uncensoredManifest.json', 'rb') as f:
     data = json.load(f)

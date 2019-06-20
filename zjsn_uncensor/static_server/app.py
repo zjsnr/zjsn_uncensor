@@ -1,8 +1,11 @@
 import os
+
 import flask
 from flask import request
 import requests
-import config
+
+import sys
+from zjsn_uncensor import config
 
 app = flask.Flask(__name__)
 
@@ -32,5 +35,9 @@ def proxy(path):
     return flask.make_response(resp.content)
 
 
-if __name__ == "__main__":
+def main():
     app.run(host='127.0.0.1', port=config.STATIC_SERVER_PORT)
+
+
+if __name__ == "__main__":
+    main()
