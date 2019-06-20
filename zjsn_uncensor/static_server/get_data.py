@@ -100,7 +100,7 @@ class ResourceDownloader():
         print('uncensored only', len(differ.uncensored_only))
 
         # download files
-        path = 'data'
+        path = Path('data')
         self.downloadFiles(uncensoredPrefix, differ.uncensored_only,
                            'uncensored', uncensoredVersion, path)
         self.downloadFiles(censoredPrefix, differ.censored_only,
@@ -109,12 +109,12 @@ class ResourceDownloader():
                            'common', censoredVersion, path)
         self.upload(path)
 
-    def downloadFiles(self, prefix, files, name, version, downloadPath='data'):
+    def downloadFiles(self, prefix, files, name, version, downloadRootPath: Path):
         print('{}: total size: {:.2f} MiB'.format(
             name, sum(f.size for f in files) / 1024 / 1024))
 
-        Path(downloadPath).mkdir(exist_ok=True)
-        path = downloadPath / name
+        downloadRootPath.mkdir(exist_ok=True)
+        path = downloadRootPath / name
 
         bar = progressbar.ProgressBar(max_value=len(files))
 
@@ -127,15 +127,15 @@ class ResourceDownloader():
             pool.map(f, files)
         bar.finish()
 
-        with (Path(path) / f'{name}.json').open('w') as f:
+        with (path / f'{name}.json').open('w') as f:
             json.dump({
                 'version': version,
                 'files': [f.toDict() for f in files]
             }, f)
 
-    async def downloadUrl(self, prefix, file, downloadPath):
+    async def downloadUrl(self, prefix, file, path: Path):
         # ensure parent path exists
-        path = Path(downloadPath)
+        path = path
         path.mkdir(exist_ok=True)
         *pathNames, filename = file.name.split('/')
         for d in pathNames:
