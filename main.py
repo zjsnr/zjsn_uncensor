@@ -26,9 +26,13 @@ def download():
 def upload():
     zjsn_uncensor.static_server.get_data.ResourceDownloader().upload()
 
+@cli.command()
+def gz():
+    zjsn_uncensor.static_server.makegz.main()
 
 cli.add_command(mitm)
 cli.add_command(get_data)
 cli.add_command(download)
 cli.add_command(upload)
+cli.add_command(gz)
 cli()
