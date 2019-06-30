@@ -1,1 +1,1 @@
-from zjsn_uncensor.static_server import app, get_data
+from zjsn_uncensor.static_server import get_data
