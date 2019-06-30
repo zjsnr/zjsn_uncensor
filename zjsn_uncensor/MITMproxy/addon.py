@@ -1,16 +1,22 @@
 '''
 实现 MITM 的主体插件
 '''
+from zjsn_uncensor import config
+from mitmproxy import http
 import os
 import re
 import gzip
 import zlib
 import json
+import logging
 
-from mitmproxy import http
-from zjsn_uncensor import config
+logger = logging.getLogger('Zjsn.Uncensor.MITM')
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler())
 
-manifestUrl = config.STATIC_URL_PREFIX + 'warshipgirlsr.manifest.gz'
+
+manifestUrl = config.MANIFEST_URL
+assert 'moefantasy.com' in manifestUrl
 
 
 def catch(func):
@@ -25,52 +31,52 @@ def catch(func):
 
 
 class ZjsnHelper:
-    VERSION_HOST = re.compile(r'version(\.channel)?\.jr\.moefantasy\.com')
+    ALLOWED_DOMAINS = ('moefantasy.com', 'gwy15.com', 'localhost')
 
-    @catch
-    def http_connect(self, flow):
+    # @catch
+    def http_connect(self, flow: http.HTTPFlow):
         pass
 
-    @catch
+    # @catch
     def request(self, flow: http.HTTPFlow):
-        print('requesting', flow.request.url)
-        # if all(domain not in flow.request.host
-        #        for domain in ('moefantasy.com', 'gwy15.com')):
-        #     flow.response = http.HTTPResponse.make(404, b'')
+        logger.debug(f'requesting url {flow.request.url}')
+        # filter domains
+        valid = any(
+            domain in flow.request.host for domain in self.ALLOWED_DOMAINS)
+        if not valid:
+            logger.debug('Unvalid domain')
+            flow.response = http.HTTPResponse.make(404, b'')
 
-    @catch
+    # @catch
     def response(self, flow: http.HTTPFlow):
-        print(f'response host: {flow.request.host}')
-        if 'warshipgirlsr.manifest.gz' in flow.request.url:
-            print('replacing manifest.gz')
-            with open('data/warshipgirlsr.manifest.gz', 'rb') as f:
-                flow.response.set_content(f.read())
+        logger.debug(f'response host {flow.request.host}')
+
+        if '/index/checkVer' in flow.request.url:
+            self.onVersionCheck(flow)
             return
 
     def onVersionCheck(self, flow: http.HTTPFlow):
         '替换 version check'
-        print('replacing version check...')
-        try:
-            data = json.loads(flow.response.get_text())
-            print(data)
-        except Exception as ex:
-            print(ex)
-            raise
+        logger.debug('replacing version check...')
+        data = json.loads(flow.response.get_text())
 
         data['ResUrl'] = manifestUrl
         data['ResUrlWu'] = manifestUrl
-        print('data replaced.')
+        logger.info('Version check data replaced.')
 
         flow.response.set_text(json.dumps(data))
 
 
+zjsnHelper = ZjsnHelper()
+
+
 def request(flow):
-    return ZjsnHelper().request(flow)
+    return zjsnHelper.request(flow)
 
 
 def http_connect(flow):
-    return ZjsnHelper().http_connect(flow)
+    return zjsnHelper.http_connect(flow)
 
 
 def response(flow):
-    return ZjsnHelper().response(flow)
+    return zjsnHelper.response(flow)
