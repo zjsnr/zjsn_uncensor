@@ -51,9 +51,18 @@ class ZjsnHelper:
     def response(self, flow: http.HTTPFlow):
         logger.debug(f'response host {flow.request.host}')
 
+        if '/test' in flow.request.url:
+            self.onTest(flow)
+            return
+
         if '/index/checkVer' in flow.request.url:
             self.onVersionCheck(flow)
             return
+
+    def onTest(self, flow: http.HTTPFlow):
+        flow.response.set_text(
+            r'<html><h1>代理正常工作</h1></html>'
+        )
 
     def onVersionCheck(self, flow: http.HTTPFlow):
         '替换 version check'
