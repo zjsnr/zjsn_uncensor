@@ -71,6 +71,8 @@ class ZjsnHelper:
 
         data['ResUrl'] = manifestUrl
         data['ResUrlWu'] = manifestUrl
+        data['cheatsCheck'] = 1
+
         logger.info('Version check data replaced.')
 
         flow.response.set_text(json.dumps(data))
