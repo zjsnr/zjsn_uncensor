@@ -97,7 +97,7 @@ class ZjsnHelper:
             data['ResUrlWu'] = config.MANIFEST_URL
         else:
             print('Resource ok. Use official CDN.')
-            data['ResUrl'] = data['ResUrlWU']
+            data['ResUrl'] = data['ResUrlWu']
         data['cheatsCheck'] = 1
 
         flow.response.set_text(json.dumps(data))
