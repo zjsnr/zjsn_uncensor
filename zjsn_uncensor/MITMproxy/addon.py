@@ -15,10 +15,6 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler())
 
 
-manifestUrl = config.MANIFEST_URL
-assert 'moefantasy.com' in manifestUrl
-
-
 def catch(func):
     def newfunc(*args, **kws):
         try:
@@ -31,8 +27,6 @@ def catch(func):
 
 
 class ZjsnHelper:
-    ALLOWED_DOMAINS = ('moefantasy.com', 'gwy15.com', 'localhost')
-
     # @catch
     def http_connect(self, flow: http.HTTPFlow):
         pass
@@ -42,10 +36,10 @@ class ZjsnHelper:
         logger.debug(f'requesting url {flow.request.url}')
         # filter domains
         valid = any(
-            domain in flow.request.host for domain in self.ALLOWED_DOMAINS)
+            domain in flow.request.host for domain in config.MITM_ALLOWED_DOMAINS)
         if not valid:
             logger.debug('Unvalid domain')
-            flow.response = http.HTTPResponse.make(404, b'')
+            flow.response = http.HTTPResponse.make(403, b'')
 
     # @catch
     def response(self, flow: http.HTTPFlow):
@@ -61,19 +55,18 @@ class ZjsnHelper:
 
     def onTest(self, flow: http.HTTPFlow):
         flow.response.set_text(
-            r'<html><h1>代理正常工作</h1></html>'
-        )
+            r'<html><h1>代理正常工作</h1></html>')
 
     def onVersionCheck(self, flow: http.HTTPFlow):
         '替换 version check'
         logger.debug('replacing version check...')
         data = json.loads(flow.response.get_text())
 
-        data['ResUrl'] = manifestUrl
-        data['ResUrlWu'] = manifestUrl
-        logger.info('Version check data replaced.')
-
+        data['ResUrl'] = config.MANIFEST_URL
+        data['ResUrlWu'] = config.MANIFEST_URL
         flow.response.set_text(json.dumps(data))
+
+        logger.info('Version check data replaced.')
 
 
 zjsnHelper = ZjsnHelper()
