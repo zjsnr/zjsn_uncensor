@@ -9,6 +9,8 @@ import gzip
 import zlib
 import json
 import logging
+import time
+import requests
 
 logger = logging.getLogger('Zjsn.Uncensor.MITM')
 logger.setLevel(logging.DEBUG)
@@ -24,6 +26,31 @@ def catch(func):
             traceback.print_exc()
             raise
     return newfunc
+
+
+def cache_for(seconds):
+    def wrapper(function):
+        def newfunction(*args, **kws):
+            cache = getattr(cache_for, '__cache__', None)
+            if cache is not None:
+                result, t = cache
+                if time.time() < t + seconds:
+                    return result
+            result = function(*args, **kws)
+            cache_for.__cache__ = (result, time.time())
+            return result
+        return newfunction
+    return wrapper
+
+
+@cache_for(600)
+def isResource403(manifestUrl):
+    r = requests.get(manifestUrl)
+    if r.status_code == 403:
+        return True
+    elif r.status_code == 200:
+        return False
+    raise RuntimeError(f'Unknown status code {r} for {manifestUrl}.')
 
 
 class ZjsnHelper:
@@ -62,8 +89,15 @@ class ZjsnHelper:
         logger.debug('replacing version check...')
         data = json.loads(flow.response.get_text())
 
-        data['ResUrl'] = config.MANIFEST_URL
-        data['ResUrlWu'] = config.MANIFEST_URL
+        data['ResUrlWu'] = data['ResUrlWu'].replace('/censor/', '/2/')
+        is403 = isResource403(data['ResUrlWu'])
+        if is403:
+            print('Resource 403. Replace with self CDN.')
+            data['ResUrl'] = config.MANIFEST_URL
+            data['ResUrlWu'] = config.MANIFEST_URL
+        else:
+            print('Resource ok. Use official CDN.')
+            data['ResUrl'] = data['ResUrlWU']
         data['cheatsCheck'] = 1
 
         flow.response.set_text(json.dumps(data))

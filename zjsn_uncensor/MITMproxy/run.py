@@ -11,7 +11,7 @@ from mitmproxy.addons import core
 from mitmproxy.options import Options
 
 from zjsn_uncensor.MITMproxy.addon import ZjsnHelper
-from zjsn_uncensor import config
+from zjsn_uncensor import config, ip
 
 class TestInterceptor(Master):
     def __init__(self, options, server):
@@ -39,7 +39,7 @@ def start_proxy(port):
         #    cacert = os.path.expanduser('./mitmproxy.pem'),
     )
     server = ProxyServer(config)
-    print('Intercepting Proxy listening on {0}'.format(port))
+    print('Intercepting Proxy listening on {} {}'.format(ip.getIP(), port))
     m = TestInterceptor(options, server)
     m.run()
 
